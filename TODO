@@ -1,0 +1,4 @@
+
+- add loglevel command line option
+
+- add HUP signal handler for reloading the config

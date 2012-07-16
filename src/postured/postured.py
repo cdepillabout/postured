@@ -1,7 +1,5 @@
 #!/usr/bin/env python2
 
-from datetime import datetime, timedelta
-from random import random
 import imp
 import sys
 import os
@@ -11,21 +9,21 @@ import argparse
 import logging
 import logging.handlers
 
+from datetime import datetime, timedelta
+from random import random
+
+from . import utils
+
 logger = None
-
-# this needs to be in here, otherwise importing actions from 
-# the stock posturedrc doesn't work
-from . import actions
-
 
 def importconfig(rcfile=None):
     """
-    Try to import ~/.posturedrc, and if we can't find it, 
+    Try to import ~/.posturedrc, and if we can't find it,
     import posturedrc.py from within this module.
     """
 
     def importpyfile(name, path):
-        "Import a python module from path and call it name."
+        """Import a python module from path and call it name."""
         try:
             return sys.modules[name]
         except KeyError:
@@ -41,37 +39,20 @@ def importconfig(rcfile=None):
     # create bytecode and clutter up the user's $HOME
     __old_write_val = sys.dont_write_bytecode
     sys.dont_write_bytecode = True
-    # import our posturedrc file, if we can't find it, we can just create it
+
     try:
-        posturedrc_mod = importpyfile("postured.posturedrc", rcfile)
+        # import our posturedrc file, if we can't find it, we can just create it
+        posturedrc_mod = importpyfile("posturedrc", rcfile)
     except IOError as e:
-        from . import posturedrc as sample_posturedrc
-        if sample_posturedrc.__file__[-1] == "c":
-            # this is a compiled python file, so we need to copy
-            # over the uncompiled file
-            shutil.copy(sample_posturedrc.__file__[:-1], os.path.expanduser(rcfile))
-        else:
-            shutil.copy(sample_posturedrc.__file__, os.path.expanduser(rcfile))
-        posturedrc_mod = importpyfile("postured.posturedrc", rcfile)
+        # TODO: This may not work if this program is being run from an egg, a zip, etc
+        ex_posturedrc_path = os.path.join(os.path.dirname(__file__), "posturedrc.py")
+        shutil.copy(ex_posturedrc_path, os.path.expanduser(rcfile))
+        posturedrc_mod = importpyfile("posturedrc", rcfile)
+
     sys.dont_write_bytecode = __old_write_val
 
     return posturedrc_mod.opts
 
-
-def weekdaystr(day):
-    """
-    Convert an int day to a string representation of the day.
-    For example, 0 returns "Monday" and 6 returns "Sunday".  This
-    mirrors the way datetime.weekday() works.
-    """
-    if day < 0 or day > 6:
-        raise ValueError("day is out of range")
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    return days[day]
-
-def tdtosecs(td):
-    "Convert a timedelta to seconds."
-    return (td.days * 24 * 60 * 60) + td.seconds + (td.microseconds * 0.000001)
 
 def nextaction(opts, count=0):
     """
@@ -82,10 +63,10 @@ def nextaction(opts, count=0):
     minlength, maxlength, starttime, endtime, days, curdate, curtime = checksettings(opts)
 
     difftime = maxlength - minlength
-    newsecs = tdtosecs(difftime) * random()
+    newsecs = utils.tdtosecs(difftime) * random()
     newdelta = timedelta(seconds=newsecs) + minlength
     nexttime = datetime.today() + newdelta
-    nextsecs = tdtosecs(newdelta)
+    nextsecs = utils.tdtosecs(newdelta)
 
     logger.debug("current time: %s" % curtime)
     logger.debug("next alarm time: %s" % nexttime)
@@ -102,7 +83,7 @@ def nextaction(opts, count=0):
 
     if curdate.weekday() not in days:
         logger.info("current day (%s) is not in days (%s), so not doing action" % 
-                (weekdaystr(curdate.weekday()), [weekdaystr(day) for day in days]))
+                (utils.weekdaystr(curdate.weekday()), [utils.weekdaystr(day) for day in days]))
         return nextsecs
 
     if count <= 0:
@@ -112,8 +93,6 @@ def nextaction(opts, count=0):
     logger.debug("running action...")
     opts.action.run()
     return nextsecs
-
-
 
 
 def checksettings(opts):

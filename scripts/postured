@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 
-import postured.postured
+import postured
 
 if __name__ == '__main__':
-    postured.postured.main()
+    postured.main()

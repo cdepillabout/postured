@@ -45,13 +45,6 @@ class PlaySound(Action):
             sound = wave.open(os.path.join(soundspath, 'bell17.wav'), 'rb')
 
         nchannels , sampwidth, framerate, nframes, comptype, compname = sound.getparams()
-        #print("params for %s:" % sound)
-        #print("\tnchannels (number of audio channels) = %s, sampwidth = %s, " % 
-        #        (nchannels, sampwidth))
-        #print("\tframerate (sampling frequency) = %s, nframes (# of audio frames) = %s, " % 
-        #        (framerate, nframes))
-        #print("\tcomptype (compression type) = %s, compname (compression name) = %s" % 
-        #        (comptype, compname))
 
         dsp = ossaudiodev.open('/dev/dsp','w')
 

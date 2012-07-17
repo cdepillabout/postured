@@ -3,6 +3,8 @@
 Utility functions that can be used multiple places.
 """
 
+from datetime import datetime, timedelta
+
 def weekdaystr(day):
     """
     Convert an int day to a string representation of the day.
@@ -17,3 +19,11 @@ def weekdaystr(day):
 def tdtosecs(td):
     """Convert a timedelta to seconds."""
     return (td.days * 24 * 60 * 60) + td.seconds + (td.microseconds * 0.000001)
+
+def get_current_time():
+    """
+    Returns a tuple of the current date and the current time.
+    """
+    curdate = datetime.today()
+    curtime = curdate.time()
+    return curdate, curtime

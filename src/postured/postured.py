@@ -40,8 +40,8 @@ def importconfig(rcfile=None):
     __old_write_val = sys.dont_write_bytecode
     sys.dont_write_bytecode = True
 
+    # import our posturedrc file, if we can't find it, we can just create it
     try:
-        # import our posturedrc file, if we can't find it, we can just create it
         posturedrc_mod = importpyfile("posturedrc", rcfile)
     except IOError as e:
         # TODO: This may not work if this program is being run from an egg, a zip, etc
@@ -54,13 +54,15 @@ def importconfig(rcfile=None):
     return posturedrc_mod.opts
 
 
-def nextaction(opts, count=0):
+def is_action_time(opts):
     """
-    Check values from the config file, do the action if applicable, and return
-    the number of seconds. Don't do the action if count is 0.
+    Check values from the config file and return a tuple of a boolean that tells
+    whether or not we should run the action, and the amount of time we should
+    sleep until this function is called again.
     """
 
-    minlength, maxlength, starttime, endtime, days, curdate, curtime = checksettings(opts)
+    minlength, maxlength, starttime, endtime, days = get_settings(opts)
+    curdate, curtime = utils.get_current_time()
 
     difftime = maxlength - minlength
     newsecs = utils.tdtosecs(difftime) * random()
@@ -74,32 +76,28 @@ def nextaction(opts, count=0):
     if curtime < starttime:
         logger.info("curtime (%s) is before start time (%s), so not doing action." % 
                 (curtime, starttime))
-        return nextsecs
-        
+        return False, nextsecs
+
     if curtime > endtime:
         logger.info("curtime (%s) is after end time (%s), so not doing action" %
                 (curtime, endtime))
-        return nextsecs
+        return False, nextsecs
 
     if curdate.weekday() not in days:
         logger.info("current day (%s) is not in days (%s), so not doing action" % 
                 (utils.weekdaystr(curdate.weekday()), [utils.weekdaystr(day) for day in days]))
-        return nextsecs
+        return False, nextsecs
 
-    if count <= 0:
-        logger.debug("not doing action because count (%s) is less than 1" % count)
-        return nextsecs
+    return True, nextsecs
 
-    logger.debug("running action...")
-    opts.action.run()
-    return nextsecs
-
-
-def checksettings(opts):
+def get_settings(opts):
     """
     Check that the settings values are all available and all make sense.
     Returns a tuple with minlength, maxlength, starttime, endtime, and days
-    values from the config file, and the curtime and curdate.
+    values from the config file.
+
+    The reason this function needs to return the values is that they could
+    change everytime the value is read.
     """
     def assert_hasattr(opts, varname):
         if not hasattr(opts, varname):
@@ -118,32 +116,28 @@ def checksettings(opts):
     endtime = opts.endtime
     days = opts.days
 
-    # current time
-    curdate = datetime.today()
-
     # time delta of zero
     tdzero = timedelta()
-    curtime = curdate.time()
-
 
     if minlength > maxlength:
         logger.error("minlength %s cannot be greater than maxlength %s" % (minlength, maxlength))
         sys.exit(1)
 
-    if minlength < tdzero: 
+    if minlength < tdzero:
         logger.error("minlength %s cannot be less than 0" % minlength)
         sys.exit(1)
 
-    if maxlength < tdzero: 
+    if maxlength < tdzero:
         logger.error("maxlength %s cannot be less than 0" % maxlength)
         sys.exit(1)
 
     if starttime >= endtime:
-        logger.error("starttime %s is greater than or equal to endtime %s" % 
+        logger.error("starttime %s is greater than or equal to endtime %s" %
                 (starttime, endtime))
         sys.exit(1)
 
-    return minlength, maxlength, starttime, endtime, days, curdate, curtime
+    return minlength, maxlength, starttime, endtime, days
+
 
 def daemonize_process():
     "Daemonize the process."
@@ -245,16 +239,17 @@ def main():
 
     parser = argparse.ArgumentParser(description="A cron-like reminder daemon.")
 
-    parser.add_argument('--rcfile', '-i', action='store', 
+    parser.add_argument('--rcfile', '-i', action='store',
             help="rc file (something other than ~/.posturedrc)")
-    parser.add_argument('--verbose', '-v', action='store_true', 
+    parser.add_argument('--verbose', '-v', action='store_true',
             help="verbose output")
 
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--daemonize', '--daemon', '-D', dest="daemonize", 
+    group.add_argument('--daemonize', '--daemon', '-D', dest="daemonize",
             action='store_true', default=None, help="detach from the controlling terminal")
-    group.add_argument('--no-daemonize', '--no-daemon', '-N', dest="daemonize", 
-            action='store_false', default=None, help="do not detach from the controlling terminal")
+    group.add_argument('--no-daemonize', '--no-daemon', '-N', dest="daemonize",
+            action='store_false', default=None,
+            help="do not detach from the controlling terminal")
 
     args = parser.parse_args()
 
@@ -272,11 +267,15 @@ def main():
         daemonize_process()
         logger.debug("daemonized.")
 
-    count = 0
+    # don't run the action the first time through the loop
+    _, sleeptime = is_action_time(opts)
+    time.sleep(sleeptime)
     while True:
-        sleeptime = nextaction(opts, count)
+        should_run_action, sleeptime = is_action_time(opts)
+        if should_run_action:
+            logger.debug("running action...")
+            opts.action.run()
         time.sleep(sleeptime)
-        count += 1
 
 if __name__ == '__main__':
     main()

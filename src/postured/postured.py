@@ -1,5 +1,10 @@
 #!/usr/bin/env python2
 
+"""
+The main file for running postured.  This is a cron-like daemon that will
+run some sort of action at random times defined in the config file.
+"""
+
 import imp
 import sys
 import os
@@ -52,7 +57,6 @@ def importconfig(rcfile=None):
     sys.dont_write_bytecode = __old_write_val
 
     return posturedrc_mod.opts
-
 
 def is_action_time(opts):
     """
@@ -138,69 +142,28 @@ def get_settings(opts):
 
     return minlength, maxlength, starttime, endtime, days
 
-
-def daemonize_process():
-    "Daemonize the process."
-    if (hasattr(os, "devnull")):
-        devnull = os.devnull
-    else:
-        devnull = "/dev/null"
-
-    try: 
-        pid = os.fork() 
-        if pid > 0: 
-            sys.exit(0) 
-    except OSError, e: 
-        logger.error("Error when forking first time: %s" % str(e))
-        sys.exit(1) 
-    
-    os.chdir("/") 
-    os.setsid() 
-    os.umask(0) 
-    
-    try: 
-        pid = os.fork() 
-        if pid > 0: 
-            sys.exit(0) 
-    except OSError, e: 
-        logger.error("Error when forking second time: %s" % str(e))
-        sys.exit(1) 
-
-    import resource     # Resource usage information.
-    maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-    if (maxfd == resource.RLIM_INFINITY):
-        maxfd = MAXFD
-
-    # Iterate through and close all file descriptors.
-    for fd in range(0, maxfd):
-        try:
-            os.close(fd)
-        except OSError:   # ERROR, fd wasn't open to begin with (ignored)
-            pass
-
-    os.open(devnull, os.O_RDWR) # standard input (0)
-    os.dup2(0, 1)            # standard output (1)
-    os.dup2(0, 2)            # standard error (2)
-
-
-def is_daemon(opts, args):
+def should_daemonize(opts, args):
     """
     Checks if should daemonize or not.  Command line arguments override the
     args from the config file.
     """
     if args.daemonize == True:
-        daemonize = True
-    elif args.daemonize == False:
-        daemonize = False
-    else:
-        if not hasattr(opts, "daemonize"):
-            print >> sys.stderr, "No \"daemonize\" defined in config."
-            sys.exit(1)
-        else:
-            daemonize = opts.daemonize
-    return daemonize
+        return True
+
+    if args.daemonize == False:
+        return False
+
+    if not hasattr(opts, "daemonize"):
+        print >> sys.stderr, "No \"daemonize\" defined in config."
+        sys.exit(1)
+
+    return opts.daemonize
 
 def setuplogging(opts, daemonize):
+    """
+    Sets up the logging.  This uses python's standard logging functions.
+    Write to syslog if we daemonize and stdout/err if we don't daemonize.
+    """
     global logger
 
     # make sure loglevel is defined in the config
@@ -212,6 +175,8 @@ def setuplogging(opts, daemonize):
     logger.setLevel(opts.loglevel)
 
     if daemonize:
+        # We we daemonize, then we can't write to stdout, so
+        # we need to write to syslog.
         sysloghandler = logging.handlers.SysLogHandler("/dev/log", "daemon")
         formatter = logging.Formatter("postured[%(process)d]: %(levelname)s: %(message)s")
         sysloghandler.setFormatter(formatter)
@@ -224,6 +189,8 @@ def setuplogging(opts, daemonize):
             def filter(self, rec):
                 return rec.levelno >= logging.WARN
 
+        # If we don't daemonize, then we can just write to stdout
+        # and stderr.
         stdouthandler = logging.StreamHandler(sys.stdout)
         stdouthandler.setLevel(logging.DEBUG)
         stdouthandler.addFilter(InfoHigherFilter())
@@ -234,13 +201,11 @@ def setuplogging(opts, daemonize):
         stderrhandler.addFilter(WarnLowerFilter())
         logger.addHandler(stderrhandler)
 
-
 def main():
-
     parser = argparse.ArgumentParser(description="A cron-like reminder daemon.")
 
     parser.add_argument('--rcfile', '-i', action='store',
-            help="rc file (something other than ~/.posturedrc)")
+            help="rc file (by default uses ~/.posturedrc)")
     parser.add_argument('--verbose', '-v', action='store_true',
             help="verbose output")
 
@@ -259,12 +224,12 @@ def main():
     else:
         opts = importconfig()
 
-    daemonize = is_daemon(opts, args)
+    daemonize = should_daemonize(opts, args)
     setuplogging(opts, daemonize)
 
     if daemonize:
         logger.debug("Trying to daemonize...")
-        daemonize_process()
+        utils.daemonize_process()
         logger.debug("daemonized.")
 
     # don't run the action the first time through the loop

@@ -27,3 +27,46 @@ def get_current_time():
     curdate = datetime.today()
     curtime = curdate.time()
     return curdate, curtime
+
+def daemonize_process():
+    "Daemonize the current process."
+    if (hasattr(os, "devnull")):
+        devnull = os.devnull
+    else:
+        devnull = "/dev/null"
+
+    try: 
+        pid = os.fork() 
+        if pid > 0: 
+            sys.exit(0) 
+    except OSError, e: 
+        logger.error("Error when forking first time: %s" % str(e))
+        sys.exit(1) 
+    
+    os.chdir("/") 
+    os.setsid() 
+    os.umask(0) 
+    
+    try: 
+        pid = os.fork() 
+        if pid > 0: 
+            sys.exit(0) 
+    except OSError, e: 
+        logger.error("Error when forking second time: %s" % str(e))
+        sys.exit(1) 
+
+    import resource     # Resource usage information.
+    maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+    if (maxfd == resource.RLIM_INFINITY):
+        maxfd = MAXFD
+
+    # Iterate through and close all file descriptors.
+    for fd in range(0, maxfd):
+        try:
+            os.close(fd)
+        except OSError:   # ERROR, fd wasn't open to begin with (ignored)
+            pass
+
+    os.open(devnull, os.O_RDWR) # standard input (0)
+    os.dup2(0, 1)            # standard output (1)
+    os.dup2(0, 2)            # standard error (2)

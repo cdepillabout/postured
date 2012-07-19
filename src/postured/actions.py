@@ -11,7 +11,7 @@ import ossaudiodev
 class Action:
     """
     A simple base class of an action that does nothing.
-    
+
     Actions just need an __init__() method, and a run() method to be
     defined.  The init should take any options the class needs to take,
     and the run method should take no options.

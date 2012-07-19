@@ -78,7 +78,7 @@ def is_action_time(opts):
     logger.debug("next alarm time: %s" % nexttime)
 
     if curtime < starttime:
-        logger.info("curtime (%s) is before start time (%s), so not doing action." % 
+        logger.info("curtime (%s) is before start time (%s), so not doing action." %
                 (curtime, starttime))
         return False, nextsecs
 
@@ -88,7 +88,7 @@ def is_action_time(opts):
         return False, nextsecs
 
     if curdate.weekday() not in days:
-        logger.info("current day (%s) is not in days (%s), so not doing action" % 
+        logger.info("current day (%s) is not in days (%s), so not doing action" %
                 (utils.weekdaystr(curdate.weekday()), [utils.weekdaystr(day) for day in days]))
         return False, nextsecs
 

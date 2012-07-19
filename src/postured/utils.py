@@ -3,6 +3,9 @@
 Utility functions that can be used multiple places.
 """
 
+import os
+import sys
+
 from datetime import datetime, timedelta
 
 def weekdaystr(day):
@@ -35,25 +38,32 @@ def daemonize_process():
     else:
         devnull = "/dev/null"
 
-    try: 
-        pid = os.fork() 
-        if pid > 0: 
-            sys.exit(0) 
-    except OSError, e: 
+    try:
+        # fork and exit out of parent
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError, e:
         logger.error("Error when forking first time: %s" % str(e))
-        sys.exit(1) 
-    
-    os.chdir("/") 
-    os.setsid() 
-    os.umask(0) 
-    
-    try: 
-        pid = os.fork() 
-        if pid > 0: 
-            sys.exit(0) 
-    except OSError, e: 
+        sys.exit(1)
+
+    # cwd changed to something safe. this prevents the current directory
+    # from being locked, hence not being able to remove it.
+    os.chdir("/")
+    # create new session id for child process
+    os.setsid()
+    # reset file mode mask
+    os.umask(0)
+
+    try:
+        # A second fork is sometimes required to fully detach the process
+        # from the controlling terminal.
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError, e:
         logger.error("Error when forking second time: %s" % str(e))
-        sys.exit(1) 
+        sys.exit(1)
 
     import resource     # Resource usage information.
     maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
@@ -67,6 +77,7 @@ def daemonize_process():
         except OSError:   # ERROR, fd wasn't open to begin with (ignored)
             pass
 
+    # Reopen stdin, stdout, and stderr, but map them to /dev/null.
     os.open(devnull, os.O_RDWR) # standard input (0)
     os.dup2(0, 1)            # standard output (1)
     os.dup2(0, 2)            # standard error (2)
